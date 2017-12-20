@@ -1,0 +1,56 @@
+---
+title: 'PhyloGLM: Using phylogenetic distances to predict susceptibility'
+author: "Hasan Sulaeman"
+output: word_document
+---
+
+Library and rjeading in
+```{r}
+library(phangorn)
+mit12and16s <- read.phyDat("java_frogs_aligned.fasta", format = "fasta")
+```
+
+Getting the distances and fitting it for maximum likelihood
+```{r}
+dist = dist.ml(mit12and16s)
+treeNJ = NJ(dist)
+fit = pml(treeNJ, data=mit12and16s)
+fitJC = optim.pml(fit, TRUE)
+logLik(fitJC)
+fitGTR = update(fit, k=4, inv=0.2)
+fitGTR = optim.pml(fitGTR, model="GTR", optInv=TRUE, optGamma=TRUE, 
+         rearrangement = "stochastic", control = pml.control(trace = 0))
+```
+
+Checking the model for the lowest AIC
+```{r}
+AIC(fitGTR) # Lowest AIC value
+AIC(fitJC)
+```
+
+Making bootstrap values and plotting the tree
+```{r}
+bs = bootstrap.pml(fitJC, bs=100, optNni=TRUE, control = pml.control(trace = 0))
+plotBS(midpoint(fitJC$tree), bs, p = 50, type="p")
+```
+
+```{r}
+taxa = sort(tree$tip.label)
+x <- rTrait(n=1, phy=tree, model="BM",
+            parameters=list(ancestral.state=0,sigma2=10, plot.tree=TRUE))
+y <- b0 + b1*x + 
+     rTrait(n=1,phy=tree,model="lambda",parameters=list(
+              ancestral.state=0,sigma2=1,lambda=0.5))
+dat = data.frame(trait=y[taxa],pred=x[taxa])
+dat$trait = c(5.405405, 12.82051, 10.52632, 0, 12.5, 3.030303, 3.030303, 16.66667, 11.11111, 50)
+dat$pred = c("floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "arboreal", "arboreal")
+fit = phylolm(trait ~ factor(pred), data=dat, phy=tree)
+summary(fit)
+
+# adding measurement errors and bootstrap
+z <- y + rnorm(60,0,1)
+dat = data.frame(trait=z[taxa],pred=x[taxa])
+fit = phylolm(trait~pred,data=dat,phy=tre,model="BM")
+summary(fit)
+
+```
